@@ -74,13 +74,13 @@ open class DgsRestController(
 
     companion object {
         private val logger: Logger = LoggerFactory.getLogger(DgsRestController::class.java)
-        private val GRAPHQL_MEDIA_TYPE = MediaType("application", "graphql")
     }
 
     // The @ConfigurationProperties bean name is <prefix>-<fqn>
     @RequestMapping(
         "#{@'dgs.graphql-com.netflix.graphql.dgs.webmvc.autoconfigure.DgsWebMvcConfigurationProperties'.path}",
-        produces = ["application/json"]
+        produces = [MediaType.APPLICATION_JSON_VALUE],
+        consumes = [MediaType.APPLICATION_JSON_VALUE, GraphQLMediaTypes.GRAPHQL_MEDIA_TYPE_VALUE]
     )
     fun graphql(
         @RequestBody body: String?,
@@ -99,7 +99,7 @@ open class DgsRestController(
         if (body != null) {
             logger.debug("Reading input value: '{}'", body)
 
-            if (GRAPHQL_MEDIA_TYPE.includes(headers.contentType)) {
+            if (GraphQLMediaTypes.isApplicationGraphQL(headers)) {
                 inputQuery = mapOf("query" to body)
                 queryVariables = emptyMap()
                 extensions = emptyMap()
