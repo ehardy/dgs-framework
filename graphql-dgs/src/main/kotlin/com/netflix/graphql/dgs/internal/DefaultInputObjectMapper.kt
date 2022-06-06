@@ -91,39 +91,40 @@ class DefaultInputObjectMapper(val customInputObjectMapper: InputObjectMapper? =
         val ctor = ReflectionUtils.accessibleConstructor(targetClass)
         ReflectionUtils.makeAccessible(ctor)
         val instance = ctor.newInstance()
+        val accessor = Accessor(instance as Any)
         var nrOfFieldErrors = 0
         inputMap.forEach {
-            val declaredField = ReflectionUtils.findField(targetClass, it.key)
-            if (declaredField != null) {
-                val fieldType = getFieldType(declaredField, targetClass)
+            if (accessor.hasProperty(it.key)) {
+                val propertyType = accessor.getPropertyType(it.key)
                 // resolve the field class we will map into, as well as an optional type argument in case such
                 // class is a parameterized type, such as a List.
-                val (fieldClass: Class<*>, fieldArgumentType: Type?) = when (fieldType) {
-                    is ParameterizedType -> fieldType.rawType as Class<*> to fieldType.actualTypeArguments[0]
-                    is Class<*> -> fieldType to null
-                    else -> Class.forName(fieldType.typeName) to null
+                val (propertyClass: Class<*>, propertyArgumentType: Type?) = when (propertyType) {
+                    is ParameterizedType -> propertyType.rawType as Class<*> to propertyType.actualTypeArguments[0]
+                    is Class<*> -> propertyType to null
+                    else -> Class.forName(propertyType.typeName) to null
                 }
 
                 if (it.value is Map<*, *>) {
-                    val mappedValue = if (fieldClass.isKotlinClass()) {
-                        mapToKotlinObject(it.value as Map<String, *>, fieldClass.kotlin)
+                    val mappedValue = if (propertyClass.isKotlinClass()) {
+                        mapToKotlinObject(it.value as Map<String, *>, propertyClass.kotlin)
                     } else {
-                        mapToJavaObject(it.value as Map<String, *>, fieldClass)
+                        mapToJavaObject(it.value as Map<String, *>, propertyClass)
                     }
-                    trySetField(declaredField, instance, mappedValue)
+
+                    accessor.trySet(it.key, mappedValue)
                 } else if (it.value is List<*>) {
-                    val newList = convertList(it.value as List<*>, targetClass, fieldClass.kotlin, fieldArgumentType)
-                    if (declaredField.type == Set::class.java) {
-                        trySetField(declaredField, instance, newList.toSet())
+                    val newList = convertList(it.value as List<*>, targetClass, propertyClass.kotlin, propertyArgumentType)
+                    if (accessor.getRawPropertyType(it.key) == Set::class.java) {
+                        accessor.trySet(it.key, newList.toSet())
                     } else {
-                        trySetField(declaredField, instance, newList)
+                        accessor.trySet(it.key, newList)
                     }
-                } else if (fieldClass.isEnum) {
+                } else if (propertyClass.isEnum) {
                     val enumValue =
-                        (fieldClass.enumConstants as Array<Enum<*>>).find { enumValue -> enumValue.name == it.value }
-                    trySetField(declaredField, instance, enumValue)
+                        (propertyClass.enumConstants as Array<Enum<*>>).find { enumValue -> enumValue.name == it.value }
+                    accessor.trySet(it.key, enumValue)
                 } else {
-                    trySetField(declaredField, instance, it.value)
+                    accessor.trySet(it.key, it.value)
                 }
             } else {
                 logger.warn("Field '${it.key}' was not found on Input object of type '$targetClass'")
@@ -141,29 +142,6 @@ class DefaultInputObjectMapper(val customInputObjectMapper: InputObjectMapper? =
         }
 
         return instance
-    }
-
-    private fun trySetField(declaredField: Field, instance: Any?, value: Any?) {
-        try {
-            declaredField.isAccessible = true
-            declaredField.set(instance, value)
-        } catch (ex: Exception) {
-            throw DgsInvalidInputArgumentException("Invalid input argument `$value` for field `${declaredField.name}` on type `${instance?.javaClass?.name}`")
-        }
-    }
-
-    private fun getFieldType(field: Field, targetClass: Class<*>): Type {
-        val genericSuperclass = targetClass.genericSuperclass
-        val fieldType: Type = field.genericType
-        return if (fieldType is ParameterizedType && fieldType.actualTypeArguments.size == 1) {
-            fieldType.actualTypeArguments[0]
-        } else if (genericSuperclass is ParameterizedType && field.type != field.genericType) {
-            val typeParameters = (genericSuperclass.rawType as Class<*>).typeParameters
-            val indexOfTypeParameter = typeParameters.indexOfFirst { it.name == fieldType.typeName }
-            genericSuperclass.actualTypeArguments[indexOfTypeParameter]
-        } else {
-            field.type
-        }
     }
 
     private fun convertList(
