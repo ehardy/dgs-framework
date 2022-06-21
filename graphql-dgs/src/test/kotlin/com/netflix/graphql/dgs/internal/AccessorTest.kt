@@ -19,11 +19,15 @@ package com.netflix.graphql.dgs.internal
 import com.netflix.graphql.dgs.exceptions.DgsInvalidInputArgumentException
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JBarInput
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JFooInput
+import com.netflix.graphql.dgs.internal.java.test.inputobjects.JGenericField
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObject
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObjectWithPublicAndPrivateFields
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObjectWithSet
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JInstrumentedInput
 import com.netflix.graphql.dgs.internal.java.test.inputobjects.JListOfListsOfLists
+import com.netflix.graphql.dgs.internal.java.test.inputobjects.sortby.JMovieSortBy
+import com.netflix.graphql.dgs.internal.java.test.inputobjects.sortby.JMovieSortByField
+import com.netflix.graphql.dgs.internal.java.test.inputobjects.sortby.JMovieSortByPublicField
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -34,8 +38,7 @@ class AccessorTest {
 
     @Test
     fun `can tell if object has property`() {
-        val instance = JInputObject()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInputObject::class.java)
 
         assertThat(accessor.hasProperty("simpleString")).isTrue
         assertThat(accessor.hasProperty("someDate")).isTrue
@@ -45,8 +48,7 @@ class AccessorTest {
 
     @Test
     fun `can tell if object has field`() {
-        val instance = JInputObjectWithPublicAndPrivateFields()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInputObjectWithPublicAndPrivateFields::class.java)
 
         assertThat(accessor.hasProperty("simpleString")).isTrue
         assertThat(accessor.hasProperty("nonExistent")).isFalse
@@ -54,8 +56,7 @@ class AccessorTest {
 
     @Test
     fun `finds types of properties with basic types`() {
-        val instance = JInputObject()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInputObject::class.java)
 
         assertThat(accessor.getPropertyType("simpleString")).isEqualTo(String::class.java)
         assertThat(accessor.getPropertyType("someDate")).isEqualTo(LocalDateTime::class.java)
@@ -64,30 +65,49 @@ class AccessorTest {
 
     @Test
     fun `finds direct field types when no setter methods are exposed`() {
-        val instance = JInputObjectWithPublicAndPrivateFields()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInputObjectWithPublicAndPrivateFields::class.java)
 
         assertThat(accessor.getPropertyType("simpleString")).isEqualTo(String::class.java)
     }
 
     @Test
-    fun `finds contained object type of generic collection`() {
-        val instance = JFooInput()
-        val accessor = Accessor(instance)
+    fun `finds contained object type of generic collection property`() {
+        val accessor = Accessor(JFooInput::class.java)
 
         assertThat(accessor.getPropertyType("bars")).isEqualTo(JBarInput::class.java)
     }
 
     @Test
+    fun `finds contained object type of generic collection field`() {
+        val accessor = Accessor(JGenericField::class.java)
+
+        assertThat(accessor.getPropertyType("bars")).isEqualTo(JBarInput::class.java)
+    }
+
+    @Test
+    fun `finds type of generic subclass property`() {
+        val accessor = Accessor(JMovieSortBy::class.java)
+
+        assertThat(accessor.getPropertyType("field")).isEqualTo(JMovieSortByField::class.java)
+    }
+
+    @Test
+    fun `finds type of generic subclass field`() {
+        val accessor = Accessor(JMovieSortByPublicField::class.java)
+
+        assertThat(accessor.getPropertyType("field")).isEqualTo(JMovieSortByField::class.java)
+    }
+
+    @Test
     fun `finds raw property type`() {
-        assertThat(Accessor(JFooInput()).getRawPropertyType("bars")).isEqualTo(List::class.java)
-        assertThat(Accessor(JInputObjectWithSet()).getRawPropertyType("items")).isEqualTo(Set::class.java)
+        assertThat(Accessor(JFooInput::class.java).getRawPropertyType("bars")).isEqualTo(List::class.java)
+        assertThat(Accessor(JInputObjectWithSet::class.java).getRawPropertyType("items")).isEqualTo(Set::class.java)
+        assertThat(Accessor(JInputObjectWithPublicAndPrivateFields::class.java).getRawPropertyType("simpleString")).isEqualTo(String::class.java)
     }
 
     @Test
     fun `finds type of generic collection containing generic collections`() {
-        val instance = JListOfListsOfLists.JListOfListOfFilters()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JListOfListsOfLists.JListOfListOfFilters::class.java)
 
         assertThat(accessor.getPropertyType("lists")).isInstanceOf(ParameterizedType::class.java)
     }
@@ -95,9 +115,9 @@ class AccessorTest {
     @Test
     fun `calls setter method when setting property`() {
         val instance = JInstrumentedInput()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInstrumentedInput::class.java)
 
-        accessor.trySet("simpleString", "hello")
+        accessor.trySet(instance, "simpleString", "hello")
 
         assertThat(instance.simpleString).isEqualTo("hello")
         assertThat(instance.wasSetterCalled()).isTrue
@@ -106,26 +126,35 @@ class AccessorTest {
     @Test
     fun `setting property value of wrong type should throw exception`() {
         val instance = JInputObject()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInputObject::class.java)
 
-        assertThatThrownBy { accessor.trySet("simpleString", 1) }.isInstanceOf(
+        assertThatThrownBy { accessor.trySet(instance, "simpleString", 1) }.isInstanceOf(
             DgsInvalidInputArgumentException::class.java
-        )
-            .hasMessageStartingWith("Invalid input argument `1` for field `simpleString` on type `com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObject`")
+        ).hasMessageStartingWith("Invalid input argument `1` for field `simpleString` on type `com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObject`")
     }
 
     @Test
     fun `can set field directly`() {
         val instance = JInputObjectWithPublicAndPrivateFields()
-        val accessor = Accessor(instance)
+        val accessor = Accessor(JInputObjectWithPublicAndPrivateFields::class.java)
 
         assertThat(accessor.hasProperty("simpleString")).isTrue
         assertThat(accessor.hasProperty("simplePrivateInt")).isTrue
 
-        accessor.trySet("simpleString", "hello")
-        accessor.trySet("simplePrivateInt", 1)
+        accessor.trySet(instance, "simpleString", "hello")
+        accessor.trySet(instance, "simplePrivateInt", 1)
 
         assertThat(instance.simpleString).isEqualTo("hello")
         assertThat(instance.simplePrivateInt).isEqualTo(1)
+    }
+
+    @Test
+    fun `setting field value of wrong type should throw exception`() {
+        val instance = JInputObjectWithPublicAndPrivateFields()
+        val accessor = Accessor(JInputObjectWithPublicAndPrivateFields::class.java)
+
+        assertThatThrownBy { accessor.trySet(instance, "simpleString", 1) }.isInstanceOf(
+            DgsInvalidInputArgumentException::class.java
+        ).hasMessageStartingWith("Invalid input argument `1` for field `simpleString` on type `com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObjectWithPublicAndPrivateFields`")
     }
 }

@@ -91,7 +91,7 @@ class DefaultInputObjectMapper(val customInputObjectMapper: InputObjectMapper? =
         val ctor = ReflectionUtils.accessibleConstructor(targetClass)
         ReflectionUtils.makeAccessible(ctor)
         val instance = ctor.newInstance()
-        val accessor = Accessor(instance as Any)
+        val accessor = Accessor(targetClass)
         var nrOfFieldErrors = 0
         inputMap.forEach {
             if (accessor.hasProperty(it.key)) {
@@ -111,20 +111,20 @@ class DefaultInputObjectMapper(val customInputObjectMapper: InputObjectMapper? =
                         mapToJavaObject(it.value as Map<String, *>, propertyClass)
                     }
 
-                    accessor.trySet(it.key, mappedValue)
+                    accessor.trySet(instance as Any, it.key, mappedValue)
                 } else if (it.value is List<*>) {
                     val newList = convertList(it.value as List<*>, targetClass, propertyClass.kotlin, propertyArgumentType)
                     if (accessor.getRawPropertyType(it.key) == Set::class.java) {
-                        accessor.trySet(it.key, newList.toSet())
+                        accessor.trySet(instance as Any, it.key, newList.toSet())
                     } else {
-                        accessor.trySet(it.key, newList)
+                        accessor.trySet(instance as Any, it.key, newList)
                     }
                 } else if (propertyClass.isEnum) {
                     val enumValue =
                         (propertyClass.enumConstants as Array<Enum<*>>).find { enumValue -> enumValue.name == it.value }
-                    accessor.trySet(it.key, enumValue)
+                    accessor.trySet(instance as Any, it.key, enumValue)
                 } else {
-                    accessor.trySet(it.key, it.value)
+                    accessor.trySet(instance as Any, it.key, it.value)
                 }
             } else {
                 logger.warn("Field '${it.key}' was not found on Input object of type '$targetClass'")
