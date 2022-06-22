@@ -91,11 +91,11 @@ class DefaultInputObjectMapper(val customInputObjectMapper: InputObjectMapper? =
         val ctor = ReflectionUtils.accessibleConstructor(targetClass)
         ReflectionUtils.makeAccessible(ctor)
         val instance = ctor.newInstance()
-        val accessor = Accessor(targetClass)
         var nrOfFieldErrors = 0
         inputMap.forEach {
-            if (accessor.hasProperty(it.key)) {
-                val propertyType = accessor.getPropertyType(it.key)
+            val property = PropertyFinder.findProperty(it.key, targetClass)
+            if (property != null) {
+                val propertyType = property.getPropertyType()
                 // resolve the field class we will map into, as well as an optional type argument in case such
                 // class is a parameterized type, such as a List.
                 val (propertyClass: Class<*>, propertyArgumentType: Type?) = when (propertyType) {
@@ -111,23 +111,23 @@ class DefaultInputObjectMapper(val customInputObjectMapper: InputObjectMapper? =
                         mapToJavaObject(it.value as Map<String, *>, propertyClass)
                     }
 
-                    accessor.trySet(instance as Any, it.key, mappedValue)
+                    property.trySet(instance as Any, mappedValue)
                 } else if (it.value is List<*>) {
                     val newList = convertList(it.value as List<*>, targetClass, propertyClass.kotlin, propertyArgumentType)
-                    if (accessor.getRawPropertyType(it.key) == Set::class.java) {
-                        accessor.trySet(instance as Any, it.key, newList.toSet())
+                    if (property.getRawPropertyType() == Set::class.java) {
+                        property.trySet(instance as Any, newList.toSet())
                     } else {
-                        accessor.trySet(instance as Any, it.key, newList)
+                        property.trySet(instance as Any, newList)
                     }
                 } else if (propertyClass.isEnum) {
                     val enumValue =
                         (propertyClass.enumConstants as Array<Enum<*>>).find { enumValue -> enumValue.name == it.value }
-                    accessor.trySet(instance as Any, it.key, enumValue)
+                    property.trySet(instance as Any, enumValue)
                 } else {
-                    accessor.trySet(instance as Any, it.key, it.value)
+                    property.trySet(instance as Any, it.value)
                 }
             } else {
-                logger.warn("Field '${it.key}' was not found on Input object of type '$targetClass'")
+                logger.warn("Property '${it.key}' was not found on Input object of type '$targetClass'")
                 nrOfFieldErrors++
             }
         }

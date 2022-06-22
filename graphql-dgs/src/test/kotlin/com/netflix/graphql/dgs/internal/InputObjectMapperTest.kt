@@ -164,7 +164,7 @@ internal class InputObjectMapperTest {
 
         assertThatThrownBy { inputObjectMapper.mapToJavaObject(newInput, JInputObject::class.java) }.isInstanceOf(
             DgsInvalidInputArgumentException::class.java
-        ).hasMessageStartingWith("Invalid input argument `1` for field `simpleString` on type `com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObject`")
+        ).hasMessageStartingWith("Invalid input argument `1` for property `simpleString` on type `com.netflix.graphql.dgs.internal.java.test.inputobjects.JInputObject`")
     }
 
     @Test
